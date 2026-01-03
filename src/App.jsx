@@ -183,6 +183,8 @@ export default function BibleScroll() {
     setLoading(false);
   };
 
+  const scrollTimeoutRef = useRef(null);
+
   const handleScroll = (e) => {
     const container = e.target;
     const scrollPosition = container.scrollTop;
@@ -197,6 +199,19 @@ export default function BibleScroll() {
         loadMultipleVerses(books, 3);
       }
     }
+
+    // Snap to nearest verse after scrolling stops
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      const targetIndex = Math.round(container.scrollTop / itemHeight);
+      container.scrollTo({
+        top: targetIndex * itemHeight,
+        behavior: 'smooth'
+      });
+    }, 150);
   };
 
   const handleTouchStart = (e) => {
@@ -361,8 +376,10 @@ export default function BibleScroll() {
                 style={styles.closeButton}
                 onClick={() => setShowLikedModal(false)}
                 className="close-button"
+                type="button"
+                aria-label="Close"
               >
-                <X size={28} color="white" />
+                <X size={24} color="white" strokeWidth={2} />
               </button>
             </div>
             
@@ -481,7 +498,8 @@ const styles = {
     overflowY: 'scroll',
     scrollSnapType: 'y mandatory',
     scrollBehavior: 'smooth',
-    WebkitOverflowScrolling: 'touch'
+    WebkitOverflowScrolling: 'touch',
+    scrollSnapStop: 'always'
   },
   verseSlide: {
     width: '100%',
@@ -672,11 +690,15 @@ const styles = {
     borderRadius: '50%',
     width: '40px',
     height: '40px',
+    minWidth: '40px',
+    minHeight: '40px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    transition: 'background 0.2s'
+    transition: 'background 0.2s',
+    padding: '0',
+    flexShrink: 0
   },
   modalContent: {
     flex: 1,
@@ -751,6 +773,10 @@ const cssStyles = `
     box-sizing: border-box;
   }
 
+  body {
+    overscroll-behavior: none;
+  }
+
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -786,13 +812,21 @@ const cssStyles = `
   }
 
   /* Hide scrollbar */
-  .scrollContainer::-webkit-scrollbar {
+  *::-webkit-scrollbar {
     display: none;
   }
   
-  .scrollContainer {
+  * {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Improve scroll snap on mobile */
+  @supports (-webkit-touch-callout: none) {
+    .scrollContainer {
+      scroll-snap-type: y mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 
   @media (max-width: 768px) {
