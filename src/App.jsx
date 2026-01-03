@@ -183,18 +183,13 @@ export default function BibleScroll() {
     setLoading(false);
   };
 
-  const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef(null);
-  const lastScrollTime = useRef(Date.now());
 
   const handleScroll = (e) => {
     const container = e.target;
     const scrollPosition = container.scrollTop;
     const itemHeight = container.clientHeight;
     const newIndex = Math.round(scrollPosition / itemHeight);
-    
-    setIsScrolling(true);
-    lastScrollTime.current = Date.now();
     
     if (newIndex !== currentIndex) {
       setCurrentIndex(newIndex);
@@ -211,44 +206,28 @@ export default function BibleScroll() {
     }
     
     scrollTimeoutRef.current = setTimeout(() => {
-      setIsScrolling(false);
       const targetIndex = Math.round(container.scrollTop / itemHeight);
-      if (Math.abs(container.scrollTop - targetIndex * itemHeight) > 5) {
-        container.scrollTo({
-          top: targetIndex * itemHeight,
-          behavior: 'smooth'
-        });
-      }
-    }, 100);
+      container.scrollTo({
+        top: targetIndex * itemHeight,
+        behavior: 'smooth'
+      });
+    }, 150);
   };
 
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
-    if (containerRef.current) {
-      containerRef.current.style.scrollSnapType = 'none';
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    // Allow native scrolling behavior
   };
 
   const handleTouchEnd = (e) => {
-    if (containerRef.current) {
-      containerRef.current.style.scrollSnapType = 'y mandatory';
-      
-      // Let the scroll momentum finish, then snap
-      setTimeout(() => {
-        const container = containerRef.current;
-        if (container) {
-          const itemHeight = container.clientHeight;
-          const targetIndex = Math.round(container.scrollTop / itemHeight);
-          container.scrollTo({
-            top: targetIndex * itemHeight,
-            behavior: 'smooth'
-          });
-        }
-      }, 50);
+    const touchEndY = e.changedTouches[0].clientY;
+    const diff = touchStartY.current - touchEndY;
+    
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && currentIndex < verses.length - 1) {
+        scrollToIndex(currentIndex + 1);
+      } else if (diff < 0 && currentIndex > 0) {
+        scrollToIndex(currentIndex - 1);
+      }
     }
   };
 
@@ -442,7 +421,6 @@ export default function BibleScroll() {
         style={styles.scrollContainer}
         onScroll={handleScroll}
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {verses.map((verse, index) => (
@@ -519,15 +497,14 @@ const styles = {
     height: '100%',
     overflowY: 'scroll',
     scrollSnapType: 'y mandatory',
+    scrollBehavior: 'smooth',
     WebkitOverflowScrolling: 'touch',
-    overscrollBehavior: 'contain',
-    touchAction: 'pan-y'
+    scrollSnapStop: 'always'
   },
   verseSlide: {
     width: '100%',
     height: '100vh',
     scrollSnapAlign: 'start',
-    scrollSnapStop: 'always',
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
@@ -796,12 +773,8 @@ const cssStyles = `
     box-sizing: border-box;
   }
 
-  html, body {
+  body {
     overscroll-behavior: none;
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
   }
 
   @keyframes spin {
@@ -846,6 +819,14 @@ const cssStyles = `
   * {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Improve scroll snap on mobile */
+  @supports (-webkit-touch-callout: none) {
+    .scrollContainer {
+      scroll-snap-type: y mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 
   @media (max-width: 768px) {
