@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Heart, Share2, Bookmark } from 'lucide-react';
+import { Heart, Share2 } from 'lucide-react';
 
 export default function BibleScroll() {
   const [verses, setVerses] = useState([]);
@@ -140,6 +140,84 @@ export default function BibleScroll() {
     setSaved(prev => ({...prev, [verseId]: !prev[verseId]}));
   };
 
+  const shareVerse = async (verse) => {
+    // Create a canvas to draw the verse image
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size
+    canvas.width = 1080;
+    canvas.height = 1920;
+    
+    // Create gradient background
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#1a1a2e');
+    gradient.addColorStop(0.5, '#16213e');
+    gradient.addColorStop(1, '#0f3460');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add decorative elements
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.1)';
+    ctx.beginPath();
+    ctx.arc(200, 300, 400, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(900, 1500, 500, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw quote marks
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+    ctx.font = 'bold 200px Georgia';
+    ctx.fillText('"', 100, 300);
+    
+    // Draw verse text
+    ctx.fillStyle = 'white';
+    ctx.font = '500 48px Georgia';
+    ctx.textAlign = 'center';
+    
+    // Word wrap the verse text
+    const maxWidth = 900;
+    const words = verse.text.split(' ');
+    let line = '';
+    let y = 700;
+    const lineHeight = 70;
+    
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + ' ';
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth && i > 0) {
+        ctx.fillText(line, canvas.width / 2, y);
+        line = words[i] + ' ';
+        y += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, canvas.width / 2, y);
+    
+    // Draw reference
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 40px Arial';
+    ctx.fillText('— ' + verse.reference, canvas.width / 2, y + 120);
+    
+    // Draw app name/watermark
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '500 28px Arial';
+    ctx.fillText('Bible Verses', canvas.width / 2, canvas.height - 100);
+    
+    // Convert canvas to blob and download
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${verse.reference.replace(/[: ]/g, '-')}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  };
+
   return (
     <div style={styles.container}>
       <style>{cssStyles}</style>
@@ -171,25 +249,9 @@ export default function BibleScroll() {
                   </span>
                 </div>
                 
-                <div style={styles.iconButton} onClick={() => toggleSave(verse.id)}>
-                  <Bookmark 
-                    size={32}
-                    fill={saved[verse.id] ? 'white' : 'none'}
-                    color="white"
-                  />
-                  <span style={styles.iconLabel}>
-                    {saved[verse.id] ? 'Saved' : 'Save'}
-                  </span>
-                </div>
-                
-                <div style={styles.iconButton}>
+                <div style={styles.iconButton} onClick={() => shareVerse(verse)}>
                   <Share2 size={32} color="white" />
                   <span style={styles.iconLabel}>Share</span>
-                </div>
-                
-                <div style={styles.iconButton}>
-                  <Book size={32} color="white" />
-                  <span style={styles.iconLabel}>Read</span>
                 </div>
               </div>
             </div>
