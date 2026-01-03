@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, Share2 } from 'lucide-react';
+import { Heart, Share2, X, BookMarked } from 'lucide-react';
 
 export default function BibleScroll() {
   const [verses, setVerses] = useState([]);
@@ -10,6 +10,99 @@ export default function BibleScroll() {
   const touchStartY = useRef(0);
   const [liked, setLiked] = useState({});
   const [saved, setSaved] = useState({});
+  const [showLikedModal, setShowLikedModal] = useState(false);
+  const [likedVerses, setLikedVerses] = useState([]);
+
+  // Storage helper functions
+  const storage = {
+    async get(key) {
+      try {
+        if (window.storage) {
+          return await window.storage.get(key);
+        } else {
+          const value = localStorage.getItem(key);
+          return value ? { key, value } : null;
+        }
+      } catch (err) {
+        console.error('Storage get error:', err);
+        return null;
+      }
+    },
+    async set(key, value) {
+      try {
+        if (window.storage) {
+          return await window.storage.set(key, value);
+        } else {
+          localStorage.setItem(key, value);
+          return { key, value };
+        }
+      } catch (err) {
+        console.error('Storage set error:', err);
+        return null;
+      }
+    },
+    async delete(key) {
+      try {
+        if (window.storage) {
+          return await window.storage.delete(key);
+        } else {
+          localStorage.removeItem(key);
+          return { key, deleted: true };
+        }
+      } catch (err) {
+        console.error('Storage delete error:', err);
+        return null;
+      }
+    },
+    async list(prefix) {
+      try {
+        if (window.storage) {
+          return await window.storage.list(prefix);
+        } else {
+          const keys = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix)) {
+              keys.push(key);
+            }
+          }
+          return { keys };
+        }
+      } catch (err) {
+        console.error('Storage list error:', err);
+        return { keys: [] };
+      }
+    }
+  };
+
+  // Load liked verses from storage on mount
+  useEffect(() => {
+    loadLikedVerses();
+  }, []);
+
+  const loadLikedVerses = async () => {
+    try {
+      const result = await storage.list('liked-verse:');
+      if (result && result.keys) {
+        const versesData = [];
+        for (const key of result.keys) {
+          try {
+            const verseResult = await storage.get(key);
+            if (verseResult && verseResult.value) {
+              const verse = JSON.parse(verseResult.value);
+              versesData.push(verse);
+              setLiked(prev => ({...prev, [verse.id]: true}));
+            }
+          } catch (err) {
+            console.log('Error loading verse:', err);
+          }
+        }
+        setLikedVerses(versesData);
+      }
+    } catch (err) {
+      console.log('No liked verses yet or error loading:', err);
+    }
+  };
 
   // Fetch books list on mount
   useEffect(() => {
@@ -132,8 +225,29 @@ export default function BibleScroll() {
     }
   };
 
-  const toggleLike = (verseId) => {
-    setLiked(prev => ({...prev, [verseId]: !prev[verseId]}));
+  const toggleLike = async (verse) => {
+    const isLiked = liked[verse.id];
+    
+    try {
+      if (isLiked) {
+        // Unlike - remove from storage
+        await storage.delete(`liked-verse:${verse.id}`);
+        setLiked(prev => {
+          const newLiked = {...prev};
+          delete newLiked[verse.id];
+          return newLiked;
+        });
+        setLikedVerses(prev => prev.filter(v => v.id !== verse.id));
+      } else {
+        // Like - save to storage
+        await storage.set(`liked-verse:${verse.id}`, JSON.stringify(verse));
+        setLiked(prev => ({...prev, [verse.id]: true}));
+        setLikedVerses(prev => [...prev, verse]);
+      }
+    } catch (err) {
+      console.error('Error toggling like:', err);
+      alert('Error saving like. Please try again.');
+    }
   };
 
   const toggleSave = (verseId) => {
@@ -222,6 +336,69 @@ export default function BibleScroll() {
     <div style={styles.container}>
       <style>{cssStyles}</style>
       
+      {/* Floating Liked Button */}
+      <button 
+        style={styles.floatingButton}
+        onClick={() => setShowLikedModal(true)}
+        className="floating-button"
+      >
+        <BookMarked size={24} color="white" />
+        {likedVerses.length > 0 && (
+          <span style={styles.badge}>{likedVerses.length}</span>
+        )}
+      </button>
+
+      {/* Liked Verses Modal */}
+      {showLikedModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowLikedModal(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>
+                <Heart size={28} fill="#ff4444" color="#ff4444" />
+                Liked Verses
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => setShowLikedModal(false)}
+                className="close-button"
+              >
+                <X size={28} color="white" />
+              </button>
+            </div>
+            
+            <div style={styles.modalContent}>
+              {likedVerses.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <Heart size={64} color="#666" />
+                  <p style={styles.emptyText}>No liked verses yet</p>
+                  <p style={styles.emptySubtext}>Start liking verses to save them here</p>
+                </div>
+              ) : (
+                <div style={styles.likedList}>
+                  {likedVerses.map((verse) => (
+                    <div key={verse.id} style={styles.likedCard} className="liked-card">
+                      <p style={styles.likedVerseText}>{verse.text}</p>
+                      <div style={styles.likedVerseFooter}>
+                        <span style={styles.likedReference}>{verse.reference}</span>
+                        <button
+                          style={styles.unlikeButton}
+                          onClick={() => {
+                            toggleLike(verse);
+                          }}
+                          className="unlike-button"
+                        >
+                          <Heart size={20} fill="#ff4444" color="#ff4444" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div 
         ref={containerRef}
         style={styles.scrollContainer}
@@ -238,35 +415,41 @@ export default function BibleScroll() {
               </div>
               
               <div style={styles.sidebar}>
-                <div style={styles.iconButton} onClick={() => toggleLike(verse.id)}>
+                <button 
+                  style={styles.iconButton} 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleLike(verse);
+                  }}
+                  className="icon-button"
+                  type="button"
+                >
                   <Heart 
                     size={32} 
                     fill={liked[verse.id] ? '#ff4444' : 'none'}
                     color={liked[verse.id] ? '#ff4444' : 'white'}
+                    style={{pointerEvents: 'none'}}
                   />
                   <span style={styles.iconLabel}>
                     {liked[verse.id] ? 'Liked' : 'Like'}
                   </span>
-                </div>
+                </button>
                 
-                <div style={styles.iconButton} onClick={() => shareVerse(verse)}>
-                  <Share2 size={32} color="white" />
-                  <span style={styles.iconLabel}>Share</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Progress indicator */}
-            <div style={styles.progressContainer}>
-              {verses.map((_, i) => (
-                <div 
-                  key={i} 
-                  style={{
-                    ...styles.progressDot,
-                    ...(i === index ? styles.progressDotActive : {})
+                <button 
+                  style={styles.iconButton} 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    shareVerse(verse);
                   }}
-                />
-              ))}
+                  className="icon-button"
+                  type="button"
+                >
+                  <Share2 size={32} color="white" style={{pointerEvents: 'none'}} />
+                  <span style={styles.iconLabel}>Share</span>
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -356,13 +539,18 @@ const styles = {
     gap: '5px',
     cursor: 'pointer',
     transition: 'transform 0.2s',
-    userSelect: 'none'
+    userSelect: 'none',
+    background: 'transparent',
+    border: 'none',
+    padding: '10px',
+    touchAction: 'manipulation'
   },
   iconLabel: {
     fontSize: '12px',
     color: 'white',
     fontWeight: '600',
-    textShadow: '0 1px 3px rgba(0,0,0,0.8)'
+    textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+    pointerEvents: 'none'
   },
   progressContainer: {
     position: 'absolute',
@@ -404,6 +592,155 @@ const styles = {
   loadingText: {
     color: 'white',
     fontSize: '16px'
+  },
+  floatingButton: {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    width: '60px',
+    height: '60px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 4px 20px rgba(255, 68, 68, 0.5)',
+    zIndex: 1000,
+    transition: 'transform 0.2s',
+    touchAction: 'manipulation'
+  },
+  badge: {
+    position: 'absolute',
+    top: '-5px',
+    right: '-5px',
+    background: '#fbbf24',
+    color: '#1a1a2e',
+    borderRadius: '50%',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    border: '2px solid #1a1a2e'
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    padding: '20px'
+  },
+  modal: {
+    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+    borderRadius: '20px',
+    width: '100%',
+    maxWidth: '600px',
+    maxHeight: '80vh',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+  },
+  modalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '24px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+  },
+  modalTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    fontSize: '24px',
+    fontWeight: 'bold',
+    color: 'white',
+    margin: 0
+  },
+  closeButton: {
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: 'none',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'background 0.2s'
+  },
+  modalContent: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '24px'
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '60px 20px',
+    gap: '16px'
+  },
+  emptyText: {
+    color: 'white',
+    fontSize: '20px',
+    fontWeight: '600',
+    margin: 0
+  },
+  emptySubtext: {
+    color: '#999',
+    fontSize: '14px',
+    margin: 0
+  },
+  likedList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  likedCard: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: '12px',
+    padding: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    transition: 'transform 0.2s, background 0.2s'
+  },
+  likedVerseText: {
+    color: 'white',
+    fontSize: '16px',
+    lineHeight: '1.6',
+    marginBottom: '12px',
+    fontFamily: "'Georgia', serif"
+  },
+  likedVerseFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  likedReference: {
+    color: '#fbbf24',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  unlikeButton: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '8px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 0.2s'
   }
 };
 
@@ -419,12 +756,33 @@ const cssStyles = `
     100% { transform: rotate(360deg); }
   }
 
-  .iconButton:hover {
+  .icon-button:hover {
     transform: scale(1.1);
   }
 
-  .iconButton:active {
+  .icon-button:active {
     transform: scale(0.95);
+  }
+
+  .floating-button:hover {
+    transform: scale(1.1);
+  }
+
+  .floating-button:active {
+    transform: scale(0.95);
+  }
+
+  .close-button:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .liked-card:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .unlike-button:hover {
+    background: rgba(255, 68, 68, 0.2) !important;
   }
 
   /* Hide scrollbar */
