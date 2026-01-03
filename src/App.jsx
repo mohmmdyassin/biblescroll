@@ -355,7 +355,7 @@ export default function BibleScroll() {
     // Draw app name/watermark
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.font = '500 28px Arial';
-    ctx.fillText('Bible Verses', canvas.width / 2, canvas.height - 100);
+    ctx.fillText('BibleScroll.vercel.app', canvas.width / 2, canvas.height - 100);
     
     // Convert canvas to blob and download
     canvas.toBlob((blob) => {
